@@ -1,14 +1,23 @@
 const express=require('express');
 const router = express.Router();
 const mongoose=require('mongoose');
+const crypto=require('crypto');
 const bcrypt= require('bcrypt');
 const User =mongoose.model("User"); 
 const jwt =require('jsonwebtoken');
 const {jwt_secret}=require('../config/Key.js');
 const requireLogin = require('../middleWare/requireLogin');
+const nodemailer=require('nodemailer')
+const sendgridTransport=require('nodemailer-sendgrid-transport')
+
+//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
 
 
-
+const transporter=nodemailer.createTransport(sendgridTransport({
+    auth:{
+        api_key:"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"
+    }
+}))
 router.post('/signup',(req,res)=>{
     const {name,email,password,pic}=req.body
     if(!email || !password || !name){
@@ -28,9 +37,15 @@ router.post('/signup',(req,res)=>{
                 pic
             })
             user.save()
-        .then(user=>{
-            res.json({message:"saved successfully"})
-        })
+            .then(user=>{
+                transporter.sendMail({
+                    to:user.email,
+                    from:"rakesh.gupta.chotu016@gmail.com",
+                    subject:"signup success",
+                    html:"<h1> welcome to instagram</h1>"
+                })
+                res.json({message:"saved successfully"})
+            })
         .catch(err=>{
             console.log(err)
         })
@@ -69,6 +84,57 @@ router.post('/signin',(req,res)=>{
         })
     })
 })
+
+router.post('/reset-password',(req,res)=>{
+    crypto.randomBytes(32,(err,buffer)=>{
+        if(err){
+            console.log(err)
+        }
+        const token=buffer.toString("hex")
+        User.findOne({email:req.body.email})
+        .then(user=>{
+            if(!user){
+                return res.status(422).json({error:"User don't exists with this email"})
+            }
+            user.resetToken=token
+            user.expireToken=Date.now()+3600000
+            user.save().then((result)=>{
+                transporter.sendMail({
+                    to:user.email,
+                    from:"rakesh.gupta.chotu016@gmail.com",
+                    subject:"password-reset",
+                    html:`
+                    <p> your request for password reset</p>
+                    <h5> click on this <a href="http:localhost:3000/reset/${token}"> link</a> to reset the password</h5>`
+                })
+            })
+            res.json({message:"check your email"})
+        })
+    })
+})
+
+router.post('/new-password',(req,res)=>{
+    const NewPassword=req.body.password
+    const sentToken=req.body.token
+    User.findOne({resetToken:sentToken,expireToken:{$gt:Date.now()}})
+    .then(user=>{
+        if(!user){
+            return res.status(422).json({error:"Try again session expired"})
+        }
+        bcrypt.hash(NewPassword,10).then(hashePassword=>{
+            user.password=hashePassword
+            user.resetToken=undefined
+            user.expireToken=undefined
+            user.save().then((savedUser)=>{
+                res.json({message:"password updated"})
+            })
+        })
+    }).catch(err=>{
+        console.log(err)
+    })
+})
+
+
 module.exports = router
 
 // experimenting with git
