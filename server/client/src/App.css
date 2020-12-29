@@ -63,3 +63,7 @@ a{
 .postProfile{
   margin-top: 2px !important;
 }
+
+.collection-item{
+  width: 100% !important;
+}
